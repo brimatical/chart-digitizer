@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Chart Digitizer - 图表数据提取工具</title>
+<meta name="description" content="从文献截图中精准提取图表数据，支持柱状图和折线图。在线免费使用，无需安装。"/>
+<meta name="keywords" content="chart digitizer, 图表数据提取, WebPlotDigitizer, 数据点采集"/>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:#f0f2f5;color:#1e293b;overflow:hidden;height:100vh}
+
+.topbar{background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;padding:10px 20px;display:flex;align-items:center;gap:16px;height:46px}
+.topbar h1{font-size:1.15rem;font-weight:700;white-space:nowrap}
+.topbar h1 a{color:#fff;text-decoration:none}
+.steps{display:flex;gap:4px;margin-left:20px}
+.step-pill{padding:4px 12px;border-radius:20px;font-size:.75rem;font-weight:600;background:rgba(255,255,255,.15);color:rgba(255,255,255,.6);transition:all .2s}
+.step-pill.active{background:#fff;color:#4f46e5}
+.step-pill.done{background:rgba(255,255,255,.3);color:#fff}
+
+.main{display:flex;height:calc(100vh - 46px)}
+
+.left{flex:1;display:flex;flex-direction:column;min-width:0}
+.toolbar{padding:8px 14px;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.toolbar button{padding:6px 14px;border:none;border-radius:7px;font-size:.82rem;font-weight:600;cursor:pointer;transition:all .15s}
+.bb{background:#4f46e5;color:#fff}.bb:hover{background:#4338ca}
+.bg{background:#059669;color:#fff}.bg:hover{background:#047857}
+.br{background:#dc2626;color:#fff}.br:hover{background:#b91c1c}
+.ba{background:#d97706;color:#fff}.ba:hover{background:#b45309}
+.by{background:#e2e8f0;color:#475569}.by:hover{background:#cbd5e1}
+.bt{background:#7c3aed;color:#fff}.bt:hover{background:#6d28d9}
+.bt.off{background:#e2e8f0;color:#475569}
+button:disabled{opacity:.4;cursor:not-allowed}
+.spacer{flex:1}
+.guide{font-size:.82rem;font-weight:600;color:#4f46e5}
+
+.cvwrap{flex:1;overflow:auto;position:relative;background:#d1d5db;cursor:crosshair}
+.cvwrap canvas{display:block;position:absolute;top:0;left:0}
+#cvOverlay{pointer-events:none;z-index:2}
+#cv{z-index:1}
+
+.upload-ovl{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f0f2f5;z-index:10}
+.upload-ovl .ico{font-size:3.5rem;margin-bottom:12px}
+.upload-ovl p{color:#475569}.upload-ovl .sub{font-size:.85rem;color:#94a3b8;margin-top:4px}
+.upload-ovl .sub2{font-size:.78rem;color:#b0b8c4;margin-top:12px;max-width:400px;text-align:center;line-height:1.6}
+.upload-ovl.dragover{background:#eef2ff;outline:3px dashed #6366f1;outline-offset:-8px}
+
+.tip{position:fixed;pointer-events:none;z-index:200;background:rgba(15,23,42,.88);color:#fff;padding:5px 10px;border-radius:5px;font:12px/1.5 Consolas,'Courier New',monospace;white-space:nowrap;display:none}
+
+.helpbar{padding:6px 14px;background:#fffbeb;border-top:1px solid #fde68a;font-size:.76rem;color:#92400e;display:none}
+.helpbar kbd{background:#fef3c7;padding:1px 4px;border-radius:3px;font-weight:600;font-family:inherit}
+
+.right{width:360px;background:#fff;border-left:1px solid #e2e8f0;display:flex;flex-direction:column;overflow-y:auto}
+.section{border-bottom:1px solid #e2e8f0;padding:10px 12px}
+.section h3{font-size:.82rem;font-weight:700;color:#475569;margin-bottom:6px}
+
+.magwrap{background:#0f172a;border-radius:7px;overflow:hidden;position:relative}
+.magwrap canvas{display:block;width:100%;image-rendering:pixelated}
+.maginfo{font-size:.72rem;color:#64748b;margin-top:5px;text-align:center;font-family:Consolas,monospace}
+
+.opt-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:.78rem}
+.opt-row label{flex:1;color:#475569}
+.opt-row input[type=color]{width:28px;height:22px;padding:0;border:1px solid #cbd5e1;border-radius:4px;cursor:pointer}
+.opt-row input[type=range]{width:80px;accent-color:#6366f1}
+.opt-row .val{width:28px;text-align:right;font-family:Consolas,monospace;font-size:.72rem;color:#94a3b8}
+
+.calib-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:.8rem}
+.calib-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.calib-label{font-weight:700;width:28px;flex-shrink:0}
+.calib-status{flex:1;color:#94a3b8;font-size:.78rem}
+.calib-status.set{color:#1e293b;font-family:Consolas,monospace}
+.calib-input{width:90px;padding:4px 6px;border:2px solid #6366f1;border-radius:5px;font-size:.85rem;outline:none}
+.calib-input:focus{border-color:#4f46e5;box-shadow:0 0 0 3px rgba(99,102,241,.15)}
+.calib-px{font-size:.7rem;color:#94a3b8;font-family:Consolas,monospace}
+.calib-actions{display:flex;gap:8px;margin-top:10px}
+.calib-actions button{flex:1}
+
+.data-sec{flex:1;display:flex;flex-direction:column;min-height:0}
+.data-hdr{padding:10px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.data-hdr h3{font-size:.82rem;font-weight:700;color:#475569}
+.data-body{flex:1;overflow-y:auto;padding:0 12px 12px}
+table{width:100%;border-collapse:collapse;font-size:.78rem}
+th{background:#f8fafc;padding:7px 5px;text-align:right;font-weight:600;color:#64748b;position:sticky;top:0;z-index:1}
+th:first-child{text-align:center;width:32px}
+td{padding:5px;text-align:right;border-bottom:1px solid #f8fafc;font-family:Consolas,monospace}
+td:first-child{text-align:center;color:#94a3b8}
+tr:hover td{background:#f0fdf4}
+.del{color:#dc2626;cursor:pointer;opacity:.4;font-size:.7rem}.del:hover{opacity:1}
+
+/* 移动端提示 */
+@media(max-width:800px){
+  .right{display:none}
+  .main{flex-direction:column}
+  .topbar .steps{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1><a href="./">Chart Digitizer</a></h1>
+  <div class="steps">
+    <div class="step-pill active" id="s1">① 上传图片</div>
+    <div class="step-pill" id="s2">② 标定坐标轴</div>
+    <div class="step-pill" id="s3">③ 采集数据</div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="left">
+    <div class="toolbar">
+      <button class="bb" onclick="$('fileIn').click()">上传图片</button>
+      <button class="ba" id="btnCalib" disabled onclick="startCalib()">开始标定</button>
+      <button class="ba" id="btnRecalib" style="display:none" onclick="startCalib()">重新标定</button>
+      <button class="bt" id="btnCross" onclick="toggleCrosshair()" title="切换十字准线 (C)">十字准线: 开</button>
+      <button class="br" id="btnClear" style="display:none" onclick="clearPts()">清空数据</button>
+      <button class="bg" id="btnCSV" style="display:none" onclick="exportCSV()">导出 CSV</button>
+      <input type="file" id="fileIn" accept="image/*" style="display:none"/>
+      <span class="spacer"></span>
+      <span class="guide" id="guide">请上传图表图片</span>
+    </div>
+    <div class="cvwrap" id="cvwrap">
+      <div class="upload-ovl" id="uplOvl">
+        <div class="ico">📊</div>
+        <p><strong>点击上传</strong>、拖拽或 <strong>Ctrl+V</strong> 粘贴截图</p>
+        <p class="sub">支持 PNG / JPG / BMP</p>
+        <p class="sub2">
+          使用方法：上传图表截图 → 点击4个坐标轴已知刻度点完成标定 → 点击图中数据点采集数值 → 导出CSV<br/>
+          所有操作在浏览器本地完成，图片不会上传到任何服务器。
+        </p>
+      </div>
+      <canvas id="cv"></canvas>
+      <canvas id="cvOverlay"></canvas>
+    </div>
+    <div class="helpbar" id="helpbar"></div>
+  </div>
+
+  <div class="right">
+    <div class="section">
+      <h3>放大镜 <span id="zTxt">8</span>x</h3>
+      <div class="magwrap"><canvas id="mcv" width="336" height="336"></canvas></div>
+      <div class="maginfo" id="minfo">—</div>
+    </div>
+    <div class="section" id="settingsPanel">
+      <h3>显示设置</h3>
+      <div class="opt-row"><label>主图准线颜色</label><input type="color" id="optCrossColor" value="#facc15"/></div>
+      <div class="opt-row"><label>主图准线透明度</label><input type="range" id="optCrossAlpha" min="5" max="100" value="50"/><span class="val" id="optCrossAlphaVal">50%</span></div>
+      <div class="opt-row"><label>放大镜准线颜色</label><input type="color" id="optMagColor" value="#facc15"/></div>
+      <div class="opt-row"><label>放大镜准线透明度</label><input type="range" id="optMagAlpha" min="5" max="100" value="40"/><span class="val" id="optMagAlphaVal">40%</span></div>
+    </div>
+    <div class="section" id="calibPanel" style="display:none">
+      <h3>坐标轴标定</h3>
+      <div id="calibRows"></div>
+      <div class="calib-actions" id="calibActions" style="display:none">
+        <button class="bg" onclick="confirmCalib()">确认标定</button>
+        <button class="by" onclick="startCalib()">重新来</button>
+      </div>
+    </div>
+    <div class="section data-sec">
+      <div class="data-hdr"><h3>数据点 (<span id="nPts">0</span>)</h3></div>
+      <div class="data-body">
+        <table><thead><tr><th>#</th><th>X</th><th>Y</th><th></th></tr></thead>
+        <tbody id="tBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const ov=$('cvOverlay'),octx=ov.getContext('2d');
+const mcv=$('mcv'),mctx=mcv.getContext('2d');
+const tip=$('tip');
+
+let showCrosshair=true;
+function getCrossColor(){return $('optCrossColor').value;}
+function getCrossAlpha(){return parseInt($('optCrossAlpha').value)/100;}
+function getMagColor(){return $('optMagColor').value;}
+function getMagAlpha(){return parseInt($('optMagAlpha').value)/100;}
+$('optCrossAlpha').oninput=()=>{$('optCrossAlphaVal').textContent=`${$('optCrossAlpha').value}%`;drawOverlay();};
+$('optMagAlpha').oninput=()=>{$('optMagAlphaVal').textContent=`${$('optMagAlpha').value}%`;updateMag(curIX(),curIY());};
+$('optCrossColor').oninput=()=>drawOverlay();
+$('optMagColor').oninput=()=>updateMag(curIX(),curIY());
+function toggleCrosshair(){showCrosshair=!showCrosshair;const b=$('btnCross');b.textContent='十字准线: '+(showCrosshair?'开':'关');if(showCrosshair)b.classList.remove('off');else b.classList.add('off');drawOverlay();}
+
+let imgObj=null,imgB64=null,zoom=8;
+const CNAMES=['X₁','X₂','Y₁','Y₂'],CDESC=['X轴已知点1 (左/小值)','X轴已知点2 (右/大值)','Y轴已知点1 (底/小值)','Y轴已知点2 (顶/大值)'],CCOLORS=['#ef4444','#f97316','#22c55e','#3b82f6'],CAXIS=['X','X','Y','Y'];
+let calibMode=false,calibIdx=-1,calibState='idle';
+let calibPts=[null,null,null,null],calibConfirmed=false,calibFn=null,tempPt=null;
+let mX=0,mY=0,kbOn=false,kbX=0,kbY=0;
+let pts=[];
+function curIX(){return kbOn?kbX:mX;}
+function curIY(){return kbOn?kbY:mY;}
+function setStep(n){['s1','s2','s3'].forEach((id,i)=>{const e=$(id);e.classList.remove('active','done');if(i<n)e.classList.add('done');else if(i===n)e.classList.add('active');});}
+function setGuide(t,c){$('guide').textContent=t;$('guide').style.color=c||'#4f46e5';}
+function setHelp(h){$('helpbar').innerHTML=h;$('helpbar').style.display=h?'block':'none';}
+function hexToRgb(h){return`${parseInt(h.slice(1,3),16)},${parseInt(h.slice(3,5),16)},${parseInt(h.slice(5,7),16)}`;}
+
+function loadImg(du){imgB64=du;const img=new Image();img.onload=()=>{imgObj=img;cv.width=ov.width=img.width;cv.height=ov.height=img.height;redraw();drawOverlay();$('uplOvl').style.display='none';$('btnCalib').disabled=false;calibMode=false;calibIdx=-1;calibState='idle';calibPts=[null,null,null,null];calibConfirmed=false;calibFn=null;tempPt=null;pts=[];refreshTable();$('calibPanel').style.display='none';$('btnRecalib').style.display='none';$('btnClear').style.display='none';$('btnCSV').style.display='none';setGuide('图片已加载，点击「开始标定」');setStep(1);setHelp('');};img.src=du;}
+function readF(f){if(!f||!f.type.startsWith('image/'))return;const r=new FileReader();r.onload=e=>loadImg(e.target.result);r.readAsDataURL(f);}
+$('fileIn').onchange=e=>{if(e.target.files[0])readF(e.target.files[0]);};
+const uplO=$('uplOvl');
+uplO.addEventListener('dragover',e=>{e.preventDefault();uplO.classList.add('dragover');});
+uplO.addEventListener('dragleave',()=>uplO.classList.remove('dragover'));
+uplO.addEventListener('drop',e=>{e.preventDefault();uplO.classList.remove('dragover');if(e.dataTransfer.files[0])readF(e.dataTransfer.files[0]);});
+$('cvwrap').addEventListener('dragover',e=>e.preventDefault());
+$('cvwrap').addEventListener('drop',e=>{e.preventDefault();if(e.dataTransfer.files[0])readF(e.dataTransfer.files[0]);});
+document.addEventListener('paste',e=>{const it=e.clipboardData?.items;if(!it)return;for(const i of it)if(i.type.startsWith('image/')){readF(i.getAsFile());e.preventDefault();break;}});
+
+function imgCoords(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*cv.width,y:(e.clientY-r.top)/r.height*cv.height};}
+function px2val(px,py){if(!calibFn)return{x:px,y:py};return{x:calibFn.xA*px+calibFn.xB,y:calibFn.yA*py+calibFn.yB};}
+
+function startCalib(){calibMode=true;calibConfirmed=false;calibFn=null;calibPts=[null,null,null,null];tempPt=null;pts=[];refreshTable();$('calibPanel').style.display='block';$('calibActions').style.display='none';$('btnCalib').style.display='none';$('btnRecalib').style.display='none';$('btnClear').style.display='none';$('btnCSV').style.display='none';setStep(1);beginCalibPoint(0);renderCalibRows();redraw();}
+function beginCalibPoint(idx){calibIdx=idx;calibState='placing';tempPt=null;setGuide(`点击放置 ${CNAMES[idx]}（${CDESC[idx]}），方向键微调，Enter确认`,CCOLORS[idx]);setHelp(`<kbd>点击</kbd> 放置 ${CNAMES[idx]} &nbsp; <kbd>↑↓←→</kbd> 微调 &nbsp; <kbd>Shift+方向</kbd> 快移 &nbsp; <kbd>Enter</kbd> 确认位置 &nbsp; <kbd>C</kbd> 准线开关`);renderCalibRows();}
+function renderCalibRows(){
+  let html='';
+  for(let i=0;i<4;i++){const p=calibPts[i],isA=(calibIdx===i),isT=(isA&&calibState==='placing'&&tempPt),isV=(isA&&calibState==='valuing');
+  html+=`<div class="calib-row" style="${isA?'background:#fefce8;border-radius:6px;padding:6px;margin:-2px -4px':''}"><div class="calib-dot" style="background:${CCOLORS[i]}"></div><div class="calib-label" style="color:${CCOLORS[i]}">${CNAMES[i]}</div>`;
+  if(p&&p.val!==undefined){html+=`<div class="calib-status set">${CAXIS[i]}=${p.val}</div><div class="calib-px">px(${p.px.toFixed(1)},${p.py.toFixed(1)})</div>`;}
+  else if(isV&&tempPt){html+=`<div style="display:flex;align-items:center;gap:4px;flex:1"><span class="calib-px">px(${tempPt.px.toFixed(1)},${tempPt.py.toFixed(1)})</span><span style="font-size:.78rem;color:#475569">${CAXIS[i]}=</span><input class="calib-input" id="ci${i}" type="text" placeholder="数值" onkeydown="ciKey(event,${i})"/></div>`;}
+  else if(isT){html+=`<div class="calib-status">px(${tempPt.px.toFixed(1)},${tempPt.py.toFixed(1)}) — 方向键微调, Enter确认</div>`;}
+  else if(isA){html+=`<div class="calib-status">请在图上点击...</div>`;}
+  else{html+=`<div class="calib-status">等待...</div>`;}
+  html+=`</div>`;}
+  $('calibRows').innerHTML=html;
+  if(calibState==='valuing'){const inp=$('ci'+calibIdx);if(inp)setTimeout(()=>inp.focus(),30);}
+}
+function ciKey(e,idx){if(e.key==='Enter'){const inp=$('ci'+idx),v=parseFloat(inp.value);if(isNaN(v)){inp.style.borderColor='#dc2626';return;}calibPts[idx]={px:tempPt.px,py:tempPt.py,val:v};tempPt=null;const nxt=nextCI(idx);if(nxt!==-1)beginCalibPoint(nxt);else{calibIdx=-1;calibState='done';$('calibActions').style.display='flex';setGuide('标定点已设置完毕，请检查后点击「确认标定」','#059669');setHelp('');}renderCalibRows();redraw();}if(e.key==='Escape'){calibState='placing';renderCalibRows();}}
+function nextCI(a){for(let i=a+1;i<4;i++)if(!calibPts[i])return i;for(let i=0;i<a;i++)if(!calibPts[i])return i;return-1;}
+function confirmCalib(){const[x1,x2,y1,y2]=calibPts;if(!x1||!x2||!y1||!y2){alert('请完成所有4个标定点');return;}const dxPx=x2.px-x1.px,dyPy=y2.py-y1.py;if(Math.abs(dxPx)<1||Math.abs(dyPy)<1){alert('标定点距离太近');return;}const xA=(x2.val-x1.val)/dxPx,xB=x1.val-xA*x1.px,yA=(y2.val-y1.val)/dyPy,yB=y1.val-yA*y1.py;calibFn={xA,xB,yA,yB};calibConfirmed=true;calibMode=false;calibIdx=-1;calibState='idle';setGuide('标定完成！点击图中采集数据点','#059669');setHelp(`<kbd>点击</kbd> 采点 &nbsp; <kbd>↑↓←→</kbd> 逐像素 &nbsp; <kbd>Shift+方向</kbd> 快移 &nbsp; <kbd>Space</kbd> 采点 &nbsp; <kbd>Delete</kbd> 删末点 &nbsp; <kbd>C</kbd> 准线 &nbsp; <kbd>+</kbd><kbd>-</kbd> 放大镜`);$('btnCalib').style.display='none';$('btnRecalib').style.display='inline-block';$('btnClear').style.display='inline-block';$('btnCSV').style.display='inline-block';setStep(2);redraw();}
+
+function redraw(){if(!imgObj)return;ctx.clearRect(0,0,cv.width,cv.height);ctx.drawImage(imgObj,0,0);
+for(let i=0;i<4;i++){const p=calibPts[i];if(p)drawCalibMark(p.px,p.py,i,CNAMES[i]+'='+p.val);}
+if(tempPt&&calibIdx>=0)drawCalibMark(tempPt.px,tempPt.py,calibIdx,'');
+if(calibConfirmed){ctx.save();ctx.setLineDash([6,4]);ctx.lineWidth=1;ctx.globalAlpha=.3;ctx.strokeStyle='#ef4444';ctx.beginPath();ctx.moveTo(calibPts[0].px,calibPts[0].py);ctx.lineTo(calibPts[1].px,calibPts[1].py);ctx.stroke();ctx.strokeStyle='#3b82f6';ctx.beginPath();ctx.moveTo(calibPts[2].px,calibPts[2].py);ctx.lineTo(calibPts[3].px,calibPts[3].py);ctx.stroke();ctx.restore();}
+pts.forEach((p,i)=>{ctx.save();ctx.beginPath();ctx.arc(p.px,p.py,6,0,Math.PI*2);ctx.strokeStyle='#fff';ctx.lineWidth=2.5;ctx.stroke();ctx.beginPath();ctx.arc(p.px,p.py,6,0,Math.PI*2);ctx.strokeStyle='#dc2626';ctx.lineWidth=1.5;ctx.stroke();ctx.strokeStyle='rgba(220,38,38,.35)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(p.px-10,p.py);ctx.lineTo(p.px+10,p.py);ctx.stroke();ctx.beginPath();ctx.moveTo(p.px,p.py-10);ctx.lineTo(p.px,p.py+10);ctx.stroke();ctx.font='bold 10px sans-serif';ctx.fillStyle='#dc2626';ctx.textAlign='left';ctx.fillText(String(i+1),p.px+8,p.py-6);ctx.restore();});}
+function drawCalibMark(x,y,idx,label){const c=CCOLORS[idx];ctx.save();ctx.beginPath();ctx.arc(x,y,9,0,Math.PI*2);ctx.fillStyle=c;ctx.globalAlpha=.2;ctx.fill();ctx.globalAlpha=1;ctx.beginPath();ctx.arc(x,y,9,0,Math.PI*2);ctx.strokeStyle=c;ctx.lineWidth=2;ctx.stroke();ctx.strokeStyle=c;ctx.lineWidth=1;ctx.globalAlpha=.6;ctx.beginPath();ctx.moveTo(x-20,y);ctx.lineTo(x+20,y);ctx.stroke();ctx.beginPath();ctx.moveTo(x,y-20);ctx.lineTo(x,y+20);ctx.stroke();if(label){ctx.globalAlpha=1;ctx.font='bold 11px sans-serif';ctx.fillStyle=c;ctx.textAlign='left';ctx.fillText(label,x+13,y-10);}ctx.restore();}
+
+function drawOverlay(){octx.clearRect(0,0,ov.width,ov.height);if(!imgObj||!showCrosshair)return;const ix=curIX(),iy=curIY(),rgb=hexToRgb(getCrossColor()),a=getCrossAlpha();octx.save();octx.strokeStyle=`rgba(${rgb},${a})`;octx.lineWidth=1;octx.beginPath();octx.moveTo(0,iy);octx.lineTo(ov.width,iy);octx.stroke();octx.beginPath();octx.moveTo(ix,0);octx.lineTo(ix,ov.height);octx.stroke();octx.beginPath();octx.arc(ix,iy,3,0,Math.PI*2);octx.fillStyle=`rgba(${rgb},${Math.min(1,a+.3)})`;octx.fill();octx.restore();}
+
+function updateMag(ix,iy){if(!imgObj)return;const S=336,src=S/zoom,sh=src/2;mctx.imageSmoothingEnabled=false;mctx.clearRect(0,0,S,S);mctx.drawImage(imgObj,ix-sh,iy-sh,src,src,0,0,S,S);
+const all=[];for(let i=0;i<4;i++){const p=calibPts[i];if(p)all.push({x:p.px,y:p.py,c:CCOLORS[i]});}if(tempPt&&calibIdx>=0)all.push({x:tempPt.px,y:tempPt.py,c:CCOLORS[calibIdx]});pts.forEach(p=>all.push({x:p.px,y:p.py,c:'#dc2626'}));
+all.forEach(p=>{const mx=(p.x-(ix-sh))*zoom,my=(p.y-(iy-sh))*zoom;if(mx>-30&&mx<S+30&&my>-30&&my<S+30){mctx.beginPath();mctx.arc(mx,my,Math.max(3,zoom/2),0,Math.PI*2);mctx.strokeStyle=p.c;mctx.lineWidth=2;mctx.stroke();}});
+const mRgb=hexToRgb(getMagColor()),mA=getMagAlpha();mctx.save();mctx.strokeStyle=`rgba(${mRgb},${mA})`;mctx.lineWidth=1;mctx.beginPath();mctx.moveTo(0,S/2);mctx.lineTo(S,S/2);mctx.stroke();mctx.beginPath();mctx.moveTo(S/2,0);mctx.lineTo(S/2,S);mctx.stroke();mctx.restore();
+if(calibConfirmed){const v=px2val(ix,iy);$('minfo').textContent=`X = ${v.x.toFixed(4)}   Y = ${v.y.toFixed(4)}   [px: ${ix.toFixed(1)}, ${iy.toFixed(1)}]`;}else{$('minfo').textContent=`像素: (${ix.toFixed(1)}, ${iy.toFixed(1)})`;}}
+
+cv.addEventListener('mousemove',e=>{if(!imgObj)return;kbOn=false;const c=imgCoords(e);mX=c.x;mY=c.y;if(calibMode&&calibState==='placing'&&tempPt){tempPt.px=c.x;tempPt.py=c.y;redraw();}drawOverlay();showTip(e.clientX,e.clientY,c.x,c.y);updateMag(c.x,c.y);});
+cv.addEventListener('mouseleave',()=>{tip.style.display='none';octx.clearRect(0,0,ov.width,ov.height);});
+cv.addEventListener('click',e=>{if(!imgObj)return;const c=imgCoords(e);if(calibMode&&calibState==='placing'&&calibIdx>=0){tempPt={px:c.x,py:c.y};kbOn=true;kbX=c.x;kbY=c.y;redraw();drawOverlay();renderCalibRows();setGuide(`${CNAMES[calibIdx]} 放置在 (${c.x.toFixed(1)}, ${c.y.toFixed(1)})，方向键微调，Enter确认`,CCOLORS[calibIdx]);}else if(calibConfirmed){addPoint(c.x,c.y);}});
+function showTip(sx,sy,ix,iy){tip.style.display='block';tip.style.left=(sx+18)+'px';tip.style.top=(sy-10)+'px';if(calibConfirmed){const v=px2val(ix,iy);tip.innerHTML=`X: ${v.x.toFixed(4)}<br>Y: ${v.y.toFixed(4)}`;}else{tip.innerHTML=`px: (${ix.toFixed(1)}, ${iy.toFixed(1)})`;}}
+
+document.addEventListener('keydown',e=>{if(!imgObj)return;if(document.activeElement&&document.activeElement.tagName==='INPUT')return;
+if(e.key==='c'||e.key==='C'){toggleCrosshair();return;}
+const arrows=['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'];
+if(arrows.includes(e.key)){e.preventDefault();if(!kbOn){kbX=mX;kbY=mY;kbOn=true;}const s=e.shiftKey?5:1;if(e.key==='ArrowUp')kbY=Math.max(0,kbY-s);if(e.key==='ArrowDown')kbY=Math.min(cv.height-1,kbY+s);if(e.key==='ArrowLeft')kbX=Math.max(0,kbX-s);if(e.key==='ArrowRight')kbX=Math.min(cv.width-1,kbX+s);if(calibMode&&calibState==='placing'&&tempPt){tempPt.px=kbX;tempPt.py=kbY;renderCalibRows();}redraw();drawOverlay();updateMag(kbX,kbY);const r=cv.getBoundingClientRect();showTip(r.left+kbX/cv.width*r.width,r.top+kbY/cv.height*r.height,kbX,kbY);}
+if(e.key==='Enter'){e.preventDefault();if(calibMode&&calibState==='placing'&&tempPt&&calibIdx>=0){calibState='valuing';renderCalibRows();setGuide(`请在右侧输入 ${CNAMES[calibIdx]} 的 ${CAXIS[calibIdx]} 轴数值，Enter确认`,CCOLORS[calibIdx]);setHelp(`在右侧输入数值，按 <kbd>Enter</kbd> 确认`);}}
+if(e.key===' '||e.code==='Space'){e.preventDefault();if(kbOn&&calibConfirmed)addPoint(kbX,kbY);}
+if(e.key==='Delete'||e.key==='Backspace'){if(calibConfirmed&&pts.length>0){pts.pop();refreshTable();redraw();drawOverlay();}}
+if(e.key==='+'||e.key==='='){zoom=Math.min(32,zoom+2);$('zTxt').textContent=zoom;updateMag(curIX(),curIY());}
+if(e.key==='-'||e.key==='_'){zoom=Math.max(2,zoom-2);$('zTxt').textContent=zoom;updateMag(curIX(),curIY());}});
+
+function addPoint(px,py){const v=px2val(px,py);pts.push({px,py,xv:v.x,yv:v.y});refreshTable();redraw();drawOverlay();}
+function removePoint(i){pts.splice(i,1);refreshTable();redraw();}
+function clearPts(){if(pts.length&&!confirm('清空所有数据点？'))return;pts=[];refreshTable();redraw();}
+function refreshTable(){$('nPts').textContent=pts.length;$('tBody').innerHTML='';pts.forEach((p,i)=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${i+1}</td><td>${p.xv.toFixed(4)}</td><td>${p.yv.toFixed(4)}</td><td><span class="del" onclick="removePoint(${i})">✕</span></td>`;$('tBody').appendChild(tr);});}
+
+function exportCSV(){if(!pts.length)return;const h='X值,Y值,X像素,Y像素';const rows=pts.map(p=>`${p.xv.toFixed(6)},${p.yv.toFixed(6)},${p.px.toFixed(2)},${p.py.toFixed(2)}`);const csv='\uFEFF'+[h,...rows].join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));a.download='chart_data.csv';a.click();}
+</script>
+</body>
+</html>
